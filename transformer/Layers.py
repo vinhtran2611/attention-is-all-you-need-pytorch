@@ -6,7 +6,12 @@ from utils import clones
 
 
 class EncoderLayer(nn.Module):
-    "Encoder is made up of self-attn and feed forward (defined below)"
+    """
+    Encoder is made up of self-attn and feed forward (defined below)
+
+    Each layer has two sub-layers. The first is a multi-head self-attention mechanism, and 
+    the second is a simple, position-wise fully connected feed-forward network
+    """
 
     def __init__(self, size, self_attn, feed_forward, dropout):
         super(EncoderLayer, self).__init__()
@@ -26,9 +31,12 @@ class DecoderLayer(nn.Module):
 
     def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
         super(DecoderLayer, self).__init__()
-        self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
-        self.enc_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
-        self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
+        self.slf_attn = MultiHeadAttention(
+            n_head, d_model, d_k, d_v, dropout=dropout)
+        self.enc_attn = MultiHeadAttention(
+            n_head, d_model, d_k, d_v, dropout=dropout)
+        self.pos_ffn = PositionwiseFeedForward(
+            d_model, d_inner, dropout=dropout)
 
     def forward(
             self, dec_input, enc_output,
@@ -55,6 +63,7 @@ class LayerNorm(nn.Module):
         mean = x.mean(-1, keepdim=True)
         std = x.std(-1, keepdim=True)
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
+
 
 class SublayerConnection(nn.Module):
     """
