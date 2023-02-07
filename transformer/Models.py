@@ -2,10 +2,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from transformer.Layers import EncoderLayer, DecoderLayer
-
-
-__author__ = "Yu-Hsiang Huang"
+from transformer.Layers import EncoderLayer, DecoderLayer, LayerNorm
+from utils import clones
 
 
 def get_pad_mask(seq, pad_idx):
@@ -46,42 +44,18 @@ class PositionalEncoding(nn.Module):
 
 
 class Encoder(nn.Module):
-    ''' A encoder model with self attention mechanism. '''
+    "Core encoder is a stack of N layers"
 
-    def __init__(
-            self, n_src_vocab, d_word_vec, n_layers, n_head, d_k, d_v,
-            d_model, d_inner, pad_idx, dropout=0.1, n_position=200, scale_emb=False):
+    def __init__(self, layer, N):
+        super(Encoder, self).__init__()
+        self.layers = clones(layer, N)
+        self.norm = LayerNorm(layer.size)
 
-        super().__init__()
-
-        self.src_word_emb = nn.Embedding(n_src_vocab, d_word_vec, padding_idx=pad_idx)
-        self.position_enc = PositionalEncoding(d_word_vec, n_position=n_position)
-        self.dropout = nn.Dropout(p=dropout)
-        self.layer_stack = nn.ModuleList([
-            EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
-            for _ in range(n_layers)])
-        self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
-        self.scale_emb = scale_emb
-        self.d_model = d_model
-
-    def forward(self, src_seq, src_mask, return_attns=False):
-
-        enc_slf_attn_list = []
-
-        # -- Forward
-        enc_output = self.src_word_emb(src_seq)
-        if self.scale_emb:
-            enc_output *= self.d_model ** 0.5
-        enc_output = self.dropout(self.position_enc(enc_output))
-        enc_output = self.layer_norm(enc_output)
-
-        for enc_layer in self.layer_stack:
-            enc_output, enc_slf_attn = enc_layer(enc_output, slf_attn_mask=src_mask)
-            enc_slf_attn_list += [enc_slf_attn] if return_attns else []
-
-        if return_attns:
-            return enc_output, enc_slf_attn_list
-        return enc_output,
+    def forward(self, x, mask):
+        "Pass the input (and mask) through each layer in turn."
+        for layer in self.layers:
+            x = layer(x, mask)
+        return self.norm(x)
 
 
 class Decoder(nn.Module):
@@ -123,6 +97,32 @@ class Decoder(nn.Module):
         if return_attns:
             return dec_output, dec_slf_attn_list, dec_enc_attn_list
         return dec_output,
+
+
+class EncoderDecoder(nn.Module):
+    """
+    A standard Encoder-Decoder architecture. Base for this and many
+    other models.
+    """
+
+    def __init__(self, encoder, decoder, src_embed, tgt_embed, generator):
+        super(EncoderDecoder, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.src_embed = src_embed
+        self.tgt_embed = tgt_embed
+        self.generator = generator
+
+    def forward(self, src, tgt, src_mask, tgt_mask):
+        "Take in and process masked src and target sequences."
+        enc = self.encode(src, src_mask)
+        return self.decode(enc, src_mask, tgt, tgt_mask)
+
+    def encode(self, src, src_mask):
+        return self.encoder(self.src_embed(src), src_mask)
+
+    def decode(self, memory, src_mask, tgt, tgt_mask):
+        return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
 
 
 class Transformer(nn.Module):

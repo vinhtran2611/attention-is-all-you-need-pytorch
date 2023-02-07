@@ -4,7 +4,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformer.Models import Transformer, get_pad_mask, get_subsequent_mask
+from torch.nn.functional import log_softmax, pad
 
+
+class Generator(nn.Module):
+    "Define standard linear + softmax generation step."
+
+    def __init__(self, d_model, vocab):
+        super(Generator, self).__init__()
+        self.proj = nn.Linear(d_model, vocab)
+
+    def forward(self, x):
+        return log_softmax(self.proj(x), dim=-1)
 
 class Translator(nn.Module):
     ''' Load a trained model and translate in beam search fashion. '''
