@@ -2,21 +2,23 @@
 import torch.nn as nn
 import torch
 from transformer.SubLayers import MultiHeadAttention, PositionwiseFeedForward
+from utils import clones
 
 
 class EncoderLayer(nn.Module):
-    ''' Compose with two layers '''
+    "Encoder is made up of self-attn and feed forward (defined below)"
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1):
+    def __init__(self, size, self_attn, feed_forward, dropout):
         super(EncoderLayer, self).__init__()
-        self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
-        self.pos_ffn = PositionwiseFeedForward(d_model, d_inner, dropout=dropout)
+        self.self_attn = self_attn
+        self.feed_forward = feed_forward
+        self.sublayer = clones(SublayerConnection(size, dropout), 2)
+        self.size = size
 
-    def forward(self, enc_input, slf_attn_mask=None):
-        enc_output, enc_slf_attn = self.slf_attn(
-            enc_input, enc_input, enc_input, mask=slf_attn_mask)
-        enc_output = self.pos_ffn(enc_output)
-        return enc_output, enc_slf_attn
+    def forward(self, x, mask):
+        "Follow Figure 1 (left) for connections."
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
+        return self.sublayer[1](x, self.feed_forward)
 
 
 class DecoderLayer(nn.Module):
