@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 from utils import clones
 from transformer.layers.layer_norm import LayerNorm
-
+import copy
 
 
 class Encoder(nn.Module):
@@ -65,25 +65,29 @@ class EncoderDecoder(nn.Module):
 class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
-    def __init__(
-            self, n_src_vocab, n_trg_vocab, src_pad_idx, trg_pad_idx,
-            d_word_vec=512, d_model=512, d_inner=2048,
-            n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1, n_position=200,
-            trg_emb_prj_weight_sharing=True, emb_src_trg_weight_sharing=True,
-            scale_emb_or_prj='prj'):
+    def __init__(self, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1):
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.h = h
+        self.dropout = dropout
+        
 
-        super().__init__()
+    def forward(self, src_vocab, tgt_vocab):
+        c = copy.deepcopy
+        attn = MultiHeadedAttention(h, d_model)
+        ff = PositionwiseFeedForward(d_model, d_ff, dropout)
+        position = PositionalEncoding(d_model, dropout)
+        model = EncoderDecoder(
+            Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
+            Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
+            nn.Sequential(Embeddings(d_model, src_vocab), c(position)),
+            nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
+            Generator(d_model, tgt_vocab),
+        )
 
-        self.src_pad_idx, self.trg_pad_idx = src_pad_idx, trg_pad_idx
-
-        # In section 3.4 of paper "Attention Is All You Need", there is such detail:
-        # "In our model, we share the same weight matrix between the two
-        # embedding layers and the pre-softmax linear transformation...
-        # In the embedding layers, we multiply those weights by \sqrt{d_model}".
-        #
-        # Options here:
-        #   'emb': multiply \sqrt{d_model} to embedding output
-        #   'prj': multiply (\sqrt{d_model} ^ -1) to linear projection output
-        #   'none': no multiplication
-
-    
+        # This was important from their code.
+        # Initialize parameters with Glorot / fan_avg.
+        for p in model.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+        return model
