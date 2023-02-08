@@ -3,9 +3,8 @@ import torch.nn as nn
 
 class Embeddings(nn.Module):
     """
-    In the embedding layers, we multiply those weights by sqrt(d_model).
+    In the embedding layers, we multiply those weights by  sqrt(d_model).
     """
-    
     def __init__(self, d_model, vocab):
         super(Embeddings, self).__init__()
         self.lut = nn.Embedding(vocab, d_model)
