@@ -3,83 +3,52 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from utils import clones
+from transformer.Layers import SublayerConnection
 
-
-def attention(query, key, value, mask=None, dropout=None):
+class EncoderLayer(nn.Module):
     """
-    Compute 'Scaled Dot Product Attention
+    Encoder is made up of self-attn and feed forward (defined below)
 
-    Args:
-        query, key, value: (B, T, C)
+    Each layer has two sub-layers. The first is a multi-head self-attention mechanism, and 
+    the second is a simple, position-wise fully connected feed-forward network
     """
 
-    d_k = query.size(-1)
-    scores = torch.matmul(query, key.transpose(-2, -1)) / \
-        math.sqrt(d_k)  # (B,T,C) @ (B,C,T) = (B, T, T)
-    if mask is not None:
-        scores = scores.masked_fill(mask == 0, -1e9)
-    attn_output_weights = scores.softmax(dim=-1)
-    if dropout is not None:
-        attn_output_weights = dropout(attn_output_weights)
-    # (B,T,T) @ (B,T,C) = (B, T, C)
-    attn_output = torch.matmul(attn_output_weights, value)
-    return attn_output, attn_output_weights
+    def __init__(self, size, self_attn, feed_forward, dropout):
+        super(EncoderLayer, self).__init__()
+        self.self_attn = self_attn
+        self.feed_forward = feed_forward
+        self.sublayer = clones(SublayerConnection(size, dropout), 2)
+        self.size = size
+
+    def forward(self, x, mask):
+        "Follow Figure 1 (left) for connections."
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
+        return self.sublayer[1](x, self.feed_forward)
 
 
-class MultiHeadedAttention(nn.Module):
-    def __init__(self, h, d_model, dropout=0.1):
-        "Take in model size and number of heads."
-        super(MultiHeadedAttention, self).__init__()
-        assert d_model % h == 0
-        # We assume d_v always equals d_k
-        self.d_k = d_model // h
-        self.h = h
-        self.linears = clones(nn.Linear(d_model, d_model), 4)
-        self.attn = None
-        self.dropout = nn.Dropout(p=dropout)
+class DecoderLayer(nn.Module):
+    """
+    In addition to the two sub-layers in each encoder layer, the decoder inserts a third sub-layer, 
+    which performs multi-head attention over the output of the encoder stack. 
+    Similar to the encoder, we employ residual connections around each of the sub-layers, followed by layer normalization.
+    
+    Decoder is made of self-attn, src-attn, and feed forward (defined below)
+    """
 
-    def forward(self, query, key, value, mask=None):
-        """
-        Implements Figure 2
-        Agrs:
-            query, key, value: (B, T, d_model)
-            mask: (1, T, T)
-        """
+    def __init__(self, size, self_attn, src_attn, feed_forward, dropout):
+        super(DecoderLayer, self).__init__()
+        self.size = size
+        self.self_attn = self_attn
+        self.src_attn = src_attn
+        self.feed_forward = feed_forward
+        self.sublayer = clones(SublayerConnection(size, dropout), 3)
 
-        if mask is not None:
-            # Same mask applied to all h heads.
-            mask = mask.unsqueeze(1)  # (1, T, T) ->  (1, 1, T, T)
-        nbatches = query.size(0)
-
-        # 1) Do all the linear projections in batch from d_model => h x d_k
-        query, key, value = [
-            lin(x).view(nbatches, -1, self.h,
-                        self.d_k).transpose(1, 2)  # (B, h, T, d_k)
-            for lin, x in zip(self.linears, (query, key, value))
-        ]
-
-        # 2) Apply attention on all the projected vectors in batch.
-        x, self.attn = attention(
-            query, key, value, mask=mask, dropout=self.dropout
-        ) # (B, h, T, d_k)
-
-        # 3) "Concat" using a view and apply a final linear.
-        x = (
-            x.transpose(1, 2)
-            .contiguous()
-            .view(nbatches, -1, self.h * self.d_k)
-        )  # (B, T, d_model)
-
-        del query
-        del key
-        del value
-        return self.linears[-1](x) # (B, T, d_model)
+    def forward(self, x, memory, src_mask, tgt_mask):
+        "Follow Figure 1 (right) for connections."
+        m = memory
+        x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, tgt_mask))
+        x = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask))
+        return self.sublayer[2](x, self.feed_forward)
 
 
-def subsequent_mask(size):
-    "Mask out subsequent positions."
-    attn_shape = (1, size, size)
-    subsequent_mask = torch.triu(torch.ones(attn_shape), diagonal=1).type(
-        torch.uint8
-    )
-    return subsequent_mask == 0
+
