@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import math
 
+
+
 class PositionalEncoding(nn.Module):
     "Implement the PE function."
 
