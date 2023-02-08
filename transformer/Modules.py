@@ -73,7 +73,7 @@ class MultiHeadedAttention(nn.Module):
         del query
         del key
         del value
-        return self.linears[-1](x)
+        return self.linears[-1](x) # (B, T, d_model)
 
 
 def subsequent_mask(size):
