@@ -2,9 +2,17 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from utils import clones
-from transformer.layers.layer_norm import LayerNorm
 import copy
+
+from utils import clones, Generator
+from transformer.layers.layer_norm import LayerNorm
+from transformer.layers.position_wise_feed_forward import PositionwiseFeedForward
+from transformer.blocks.encode_layer import EncoderLayer
+from transformer.blocks.decode_layer import DecoderLayer
+from transformer.layers.multi_head_attention import MultiHeadedAttention
+from embedding.position_encoding import PositionalEncoding
+from embedding.token_embedding import Embeddings
+
 
 
 class Encoder(nn.Module):
@@ -74,15 +82,15 @@ class Transformer(nn.Module):
 
     def forward(self, src_vocab, tgt_vocab):
         c = copy.deepcopy
-        attn = MultiHeadedAttention(h, d_model)
-        ff = PositionwiseFeedForward(d_model, d_ff, dropout)
-        position = PositionalEncoding(d_model, dropout)
+        attn = MultiHeadedAttention(self.h, self.d_model)
+        ff = PositionwiseFeedForward(self.d_model, self.d_ff, self.dropout)
+        position = PositionalEncoding(self.d_model, self.dropout)
         model = EncoderDecoder(
-            Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
-            Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
-            nn.Sequential(Embeddings(d_model, src_vocab), c(position)),
-            nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
-            Generator(d_model, tgt_vocab),
+            Encoder(EncoderLayer(self.d_model, c(attn), c(ff), self.dropout), self.N),
+            Decoder(DecoderLayer(self.d_model, c(attn), c(attn), c(ff), self.dropout), self.N),
+            nn.Sequential(Embeddings(self.d_model, src_vocab), c(position)),
+            nn.Sequential(Embeddings(self.d_model, tgt_vocab), c(position)),
+            Generator(self.d_model, tgt_vocab),
         )
 
         # This was important from their code.
