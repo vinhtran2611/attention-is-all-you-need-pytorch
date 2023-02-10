@@ -1,40 +1,30 @@
-'''A wrapper class for scheduled optimizer '''
-import numpy as np
+import torch
 
-class ScheduledOptim():
-    '''A simple wrapper class for learning rate scheduling'''
+from transformer.models import make_tranformers_model
+from transformer.utils import subsequent_mask
 
-    def __init__(self, optimizer, lr_mul, d_model, n_warmup_steps):
-        self._optimizer = optimizer
-        self.lr_mul = lr_mul
-        self.d_model = d_model
-        self.n_warmup_steps = n_warmup_steps
-        self.n_steps = 0
+def inference_test():
+    test_model = make_tranformers_model(11, 11, 2)
+    test_model.eval()
+    src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
+    src_mask = torch.ones(1, 1, 10)
 
+    memory = test_model.encode(src, src_mask)
+    ys = torch.zeros(1, 1).type_as(src)
 
-    def step_and_update_lr(self):
-        "Step with the inner optimizer"
-        self._update_learning_rate()
-        self._optimizer.step()
+    for i in range(9):
+        out = test_model.decode(
+            memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
+        )
+        prob = test_model.generator(out[:, -1])
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.data[0]
+        ys = torch.cat(
+            [ys, torch.empty(1, 1).type_as(src.data).fill_(next_word)], dim=1
+        )
 
+    print("Example Untrained Model Prediction:", ys)
 
-    def zero_grad(self):
-        "Zero out the gradients with the inner optimizer"
-        self._optimizer.zero_grad()
-
-
-    def _get_lr_scale(self):
-        d_model = self.d_model
-        n_steps, n_warmup_steps = self.n_steps, self.n_warmup_steps
-        return (d_model ** -0.5) * min(n_steps ** (-0.5), n_steps * n_warmup_steps ** (-1.5))
-
-
-    def _update_learning_rate(self):
-        ''' Learning rate scheduling per step '''
-
-        self.n_steps += 1
-        lr = self.lr_mul * self._get_lr_scale()
-
-        for param_group in self._optimizer.param_groups:
-            param_group['lr'] = lr
-
+def run_tests():
+    for _ in range(10):
+        inference_test()
