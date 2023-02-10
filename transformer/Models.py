@@ -1,4 +1,4 @@
-''' Define the Transformer model '''
+""" Define the Transformer model """
 import torch
 import torch.nn as nn
 import numpy as np
@@ -14,13 +14,12 @@ from embedding.position_encoding import PositionalEncoding
 from embedding.token_embedding import Embeddings
 
 
-
 class Encoder(nn.Module):
     "Core encoder is a stack of N layers"
 
     def __init__(self, layer, N):
         super(Encoder, self).__init__()
-        self.layers = clones(layer, N) # return nn.ModuleList
+        self.layers = clones(layer, N)  # return nn.ModuleList
         self.norm = LayerNorm(layer.size)
 
     def forward(self, x, mask):
@@ -70,32 +69,25 @@ class EncoderDecoder(nn.Module):
         return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
 
 
-class Transformer(nn.Module):
-    ''' A sequence to sequence model with attention mechanism. '''
+def make_tranformers_model(
+    src_vocab, tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
+):
+    "Helper: Construct a model from hyperparameters."
+    c = copy.deepcopy
+    attn = MultiHeadedAttention(h, d_model)
+    ff = PositionwiseFeedForward(d_model, d_ff, dropout)
+    position = PositionalEncoding(d_model, dropout)
+    model = EncoderDecoder(
+        Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
+        Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),
+        nn.Sequential(Embeddings(d_model, src_vocab), c(position)),
+        nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
+        Generator(d_model, tgt_vocab),
+    )
 
-    def __init__(self, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1):
-        self.d_model = d_model
-        self.d_ff = d_ff
-        self.h = h
-        self.dropout = dropout
-        
-
-    def forward(self, src_vocab, tgt_vocab):
-        c = copy.deepcopy
-        attn = MultiHeadedAttention(self.h, self.d_model)
-        ff = PositionwiseFeedForward(self.d_model, self.d_ff, self.dropout)
-        position = PositionalEncoding(self.d_model, self.dropout)
-        model = EncoderDecoder(
-            Encoder(EncoderLayer(self.d_model, c(attn), c(ff), self.dropout), self.N),
-            Decoder(DecoderLayer(self.d_model, c(attn), c(attn), c(ff), self.dropout), self.N),
-            nn.Sequential(Embeddings(self.d_model, src_vocab), c(position)),
-            nn.Sequential(Embeddings(self.d_model, tgt_vocab), c(position)),
-            Generator(self.d_model, tgt_vocab),
-        )
-
-        # This was important from their code.
-        # Initialize parameters with Glorot / fan_avg.
-        for p in model.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-        return model
+    # This was important from their code.
+    # Initialize parameters with Glorot / fan_avg.
+    for p in model.parameters():
+        if p.dim() > 1:
+            nn.init.xavier_uniform_(p)
+    return model
